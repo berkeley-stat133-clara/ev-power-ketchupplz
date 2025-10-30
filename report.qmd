@@ -8,27 +8,106 @@ format: typst
 ## **Part 0: libraries**
 
 ```{r}
+library(tidyverse)
+install.packages("janitor")
+library(janitor)
 
+# Read in all data files
+energy_price <- read_csv("data/av-energy-price-2021-2023.csv")
+ev_reg <- read_csv("data/ev-registrations-by-state-2023.csv")
+
+renew_2021 <- read_csv("data/renew-use-2021.csv")
+renew_2022 <- read_csv("data/renew-use-2022.csv")
+renew_2023 <- read_csv("data/renew-use-2023.csv")
+
+total_2021 <- read_csv("data/total-use-2021.csv")
+total_2022 <- read_csv("data/total-use-2022.csv")
+total_2023 <- read_csv("data/total-use-2023.csv")
 ```
 
 ## **Part 1:** **Defining Research Question**
 
-Chosen Question:
+**How has the share of renewable energy changed from 2021–2023 across states?**
+
+\- Data: `renew_use_2021.csv`, `renew_use_2022.csv`, `renew_use_2023.csv`
+
+\- Purpose: To examine overall growth in renewable energy generation.
 
 ## **Part 2: Data Preparation and Cleaning**
 
 ```{r}
+# clean columns names
+renew_2021 <- clean_names(renew_2021)
+renew_2022 <- clean_names(renew_2022)
+renew_2023 <- clean_names(renew_2023)
+total_2021 <- clean_names(total_2021)
+total_2022 <- clean_names(total_2022)
+total_2023 <- clean_names(total_2023)
 
+# clean up states names
+renew_2021 <- renew_2021 |> mutate(state = str_to_upper(state))
+renew_2022 <- renew_2022 |> mutate(state = str_to_upper(state))
+renew_2023 <- renew_2023 |> mutate(state = str_to_upper(state))
+
+# removes symbols and text from numeric columns
+renew_2021 <- renew_2021 |>
+  mutate(renewable_use_2021 = parse_number(renewable_use_2021))
+
+renew_2022 <- renew_2022 |>
+  mutate(renewable_use_2022 = parse_number(renewable_use_2022))
+
+renew_2023 <- renew_2023 |>
+  mutate(renewable_use_2023 = parse_number(renewable_use_2023))
 ```
 
 ## **Part 3: Joining / Pivoting Datasets for Analysis**
 
 ```{r}
+# add a year columns
+renew_2021 <- renew_2021 %>%
+  rename(renewable_use = renewable_use_2021) %>%
+  mutate(year = 2021)
 
+renew_2022 <- renew_2022 %>%
+  rename(renewable_use = renewable_use_2022) %>%
+  mutate(year = 2022)
+
+renew_2023 <- renew_2023 %>%
+  rename(renewable_use = renewable_use_2023) %>%
+  mutate(year = 2023)
+
+# combines all years
+renew_all <- bind_rows(renew_2021, renew_2022, renew_2023)
+total_all <- bind_rows(total_2021, total_2022, total_2023)
+
+# reshape 
+total_all <- total_all |>
+  pivot_longer(
+    cols = -energy_source, 
+    names_to = "state", 
+    values_to = "total_use"
+  ) |>
+  mutate(state = str_to_upper(state))
+total_all <- total_all |> mutate(year = 2021)
+
+# total renwable use by state
+renew_summary <- renew_all |>
+  group_by(state, year) |>
+  summarize(total_renewable_use = sum(renewable_use, na.rm = TRUE))
+
+# combine renewable and total datasets
+energy_combined <- renew_summary |>
+  inner_join(total_all, by = c("state", "year")) |>
+  mutate(renewable_share = total_renewable_use / total_use)
 ```
 
 ## **Part 4: Mapping Visualization**
 
 ```{r}
-
+ggplot(energy_combined, aes(x = year, y = renewable_share, group = state)) +
+  geom_line(alpha = 0.3) +
+  stat_summary(fun = mean, geom = "line", color = "blue", size = 1.5) +
+  labs(title = "Average Renewable Energy Share Across States (2021–2023)",
+       y = "Renewable Share", x = "Year") +
+  theme_minimal()
 ```
